@@ -1,8 +1,7 @@
 import { View, Text, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useState, useCallback } from 'react';
-import { NavigationIndependentTree, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack } from '@/.expo/types/router';
 
 // ─── Static Menu Items ───────────────────────────────────────────────────────
 const staticMenuItems = [
@@ -155,6 +154,7 @@ export default function FavoritesScreen() {
     </View>
   );
 }
+
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
