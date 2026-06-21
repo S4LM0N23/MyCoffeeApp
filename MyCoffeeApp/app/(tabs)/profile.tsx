@@ -14,8 +14,18 @@ function ProfileScreenContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    checkConnection();
     loadProfile();
   }, []);
+
+  async function checkConnection() {
+    try {
+      const response = await fetch('https://api.sampleapis.com/coffee/hot', { method: 'HEAD' });
+      if (!response.ok) throw new Error('No connection');
+    } catch (err) {
+      setError('☕ No internet connection. Please check your connection.');
+    }
+  }
 
   async function loadProfile() {
     try {
