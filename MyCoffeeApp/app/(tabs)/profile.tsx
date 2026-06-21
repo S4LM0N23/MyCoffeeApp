@@ -11,20 +11,41 @@ function ProfileScreenContent() {
   const [name, setName] = useState('');
   const [editName, setEditName] = useState('');
   const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadProfile();
   }, []);
 
   async function loadProfile() {
-    const stored = await AsyncStorage.getItem('profileName');
-    if (stored) setName(stored);
+    try {
+      const stored = await AsyncStorage.getItem('profileName');
+      if (stored) setName(stored);
+    } catch (err) {
+      console.warn('Failed to load profile name', err);
+      setError('Unable to load profile. Please try again.');
+    }
   }
 
   async function saveName() {
-    await AsyncStorage.setItem('profileName', editName);
-    setName(editName);
-    setEditing(false);
+    try {
+      await AsyncStorage.setItem('profileName', editName);
+      setName(editName);
+      setEditing(false);
+    } catch (err) {
+      console.warn('Failed to save profile name', err);
+      setError('Unable to save profile. Please try again.');
+    }
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>☕</Text>
+        <Text style={styles.errorTitle}>Oops!</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+      </View>
+    );
   }
 
   return (
@@ -40,7 +61,7 @@ function ProfileScreenContent() {
             style={styles.input}
             value={editName}
             onChangeText={setEditName}
-            placeholder="enter your name"
+            placeholder="Enter your name"
             placeholderTextColor="#aaa"
           />
           <TouchableOpacity style={styles.saveButton} onPress={saveName}>
@@ -49,14 +70,14 @@ function ProfileScreenContent() {
         </View>
       ) : (
         <View style={styles.nameBlock}>
-          <Text style={styles.name}>{name || 'Juan dela Cruz'}</Text>
+          <Text style={styles.name}>{name || 'Guest User'}</Text>
           <TouchableOpacity onPress={() => { setEditName(name); setEditing(true); }}>
             <Text style={styles.editLink}>Edit Name</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      <Text style={styles.email}>ilovecoffeedawg@coffee.com</Text>
+      <Text style={styles.email}>ilovecoffee@coffee.com</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Member Since</Text>
@@ -70,7 +91,7 @@ function ProfileScreenContent() {
 
       <View style={styles.card}>
         <Text style={styles.cardLabel}>Delivery Address</Text>
-        <Text style={styles.cardPlaceholder}>not set</Text>
+        <Text style={styles.cardPlaceholder}>Not set</Text>
       </View>
     </View>
   );
@@ -101,6 +122,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     backgroundColor: '#FDF6EE',
     alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: '#FDF6EE',
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#B12704',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#3E1F00',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   avatarBox: {
     width: 100,

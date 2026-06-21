@@ -10,24 +10,45 @@ const Stack = createStackNavigator();
 function CartScreen({ navigation }: any) {
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState<{ note: string; time: string } | null>(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadNote();
   }, []);
 
   async function loadNote() {
-    const raw = await AsyncStorage.getItem('orderNote');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      setSaved(parsed);
+    try {
+      const raw = await AsyncStorage.getItem('orderNote');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSaved(parsed);
+      }
+    } catch (err) {
+      console.warn('Failed to load saved instruction', err);
+      setError('Unable to load cart. Please try again.');
     }
   }
 
   async function saveNote() {
-    const order = { note: note, time: new Date().toLocaleTimeString() };
-    await AsyncStorage.setItem('orderNote', JSON.stringify(order));
-    setSaved(order);
-    setNote('');
+    try {
+      const order = { note: note.trim(), time: new Date().toLocaleTimeString() };
+      await AsyncStorage.setItem('orderNote', JSON.stringify(order));
+      setSaved(order);
+      setNote('');
+    } catch (err) {
+      console.warn('Failed to save instruction', err);
+      setError('Unable to save note. Please try again.');
+    }
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>☕</Text>
+        <Text style={styles.errorTitle}>Oops!</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+      </View>
+    );
   }
 
   return (
@@ -118,6 +139,30 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     backgroundColor: '#FDF6EE',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: '#FDF6EE',
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#B12704',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#3E1F00',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   heading: {
     fontSize: 24,

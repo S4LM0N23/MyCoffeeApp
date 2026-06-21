@@ -1,9 +1,13 @@
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationIndependentTree } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+const remoteMenuUrl = 'https://api.sampleapis.com/coffee/hot';
+
 // ─── Coffee Menu Data ────────────────────────────────────────────────────────
-const menuItems = [
+const staticMenuItems = [
   { id: '1', category: 'Hot Drinks',  name: 'Americano',   price: '₱120', desc: 'Bold and strong black coffee brewed with espresso shots.' },
   { id: '2', category: 'Hot Drinks',  name: 'Cappuccino',  price: '₱150', desc: 'Classic Italian coffee with equal parts espresso, steamed milk, and foam.' },
   { id: '3', category: 'Hot Drinks',  name: 'Matcha Latte', price: '₱160', desc: 'Smooth Matcha with creamy steamed milk.' },
@@ -23,26 +27,129 @@ const Stack = createNativeStackNavigator();
 
 // ─── Home Screen (Coffee Menu) ───────────────────────────────────────────────
 function HomeScreen({ navigation }: any) {
+  const [menuSections, setMenuSections] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadMenu();
+    loadFavorites();
+  }, []);
+
+  async function loadMenu() {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(remoteMenuUrl);
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        throw new Error('Invalid menu data');
+      }
+      setMenuSections([
+        {
+          title: 'Drinks',
+          data: staticMenuItems.filter((item) => item.category === 'Hot Drinks' || item.category === 'Cold Drinks'),
+        },
+        {
+          title: 'Desserts',
+          data: staticMenuItems.filter((item) => item.category === 'Desserts'),
+        },
+      ]);
+    } catch (err: any) {
+      console.warn('Menu load error:', err);
+      setError('☕ No internet connection. Please check your connection.');
+      setMenuSections([
+        {
+          title: 'Drinks',
+          data: staticMenuItems.filter((item) => item.category === 'Hot Drinks' || item.category === 'Cold Drinks'),
+        },
+        {
+          title: 'Desserts',
+          data: staticMenuItems.filter((item) => item.category === 'Desserts'),
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadFavorites() {
+    try {
+      const raw = await AsyncStorage.getItem('favorites');
+      if (raw) {
+        setFavoriteIds(JSON.parse(raw));
+      }
+    } catch (err) {
+      console.warn('Failed to load favorites', err);
+    }
+  }
+
+  async function saveFavorites(ids: string[]) {
+    try {
+      await AsyncStorage.setItem('favorites', JSON.stringify(ids));
+      setFavoriteIds(ids);
+    } catch (err) {
+      console.warn('Failed to save favorites', err);
+    }
+  }
+
+  function toggleFavorite(id: string) {
+    const updated = favoriteIds.includes(id) ? favoriteIds.filter((itemId) => itemId !== id) : [...favoriteIds, id];
+    saveFavorites(updated);
+  }
+
+  const renderItem = ({ item }: any) => {
+    const isFavorite = favoriteIds.includes(item.id);
+    return (
+      <TouchableOpacity
+        style={styles.item}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate('Detail', { coffee: item })}
+      >
+        <View style={styles.itemHeader}>
+          <Text style={styles.category}>{item.category}</Text>
+          <TouchableOpacity onPress={() => toggleFavorite(item.id)} style={styles.favoriteButton}>
+            <Text style={[styles.favorite, isFavorite && styles.favoriteActive]}>{isFavorite ? '❤️' : '🤍'}</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.price}>{item.price}</Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>☕ Coffee Shop Menu</Text>
-
-      {/* FlatList renders the menuItems array as a scrollable list */}
-      <FlatList
-        data={menuItems}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.item}
-            activeOpacity={0.75}
-            onPress={() => navigation.navigate('Detail', { coffee: item })}
-          >
-            <Text style={styles.category}>{item.category}</Text>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.price}>{item.price}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#045028" />
+          <Text style={styles.loadingText}>Brewing your coffee menu…</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>☕</Text>
+          <Text style={styles.errorTitle}>Oops!</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.heading}>☕ Coffee Shop Menu</Text>
+          <SectionList
+            sections={menuSections}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            renderSectionHeader={({ section: { title } }) => (
+              <Text style={styles.sectionHeader}>{title}</Text>
+            )}
+            contentContainerStyle={styles.listContent}
+          />
+        </>
+      )}
     </View>
   );
 }
@@ -121,6 +228,22 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  favoriteButton: {
+    padding: 4,
+  },
+  favorite: {
+    fontSize: 20,
+    color: '#888',
+  },
+  favoriteActive: {
+    color: '#228B22',
+  },
   category: {
     fontSize: 12,
     color: '#888',
@@ -137,6 +260,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#C1440E',
     marginTop: 4,
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#045028',
+    backgroundColor: '#EEF6EF',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  listContent: {
+    paddingBottom: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#045028',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  errorText: {
+    color: '#B12704',
+    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: '#FDF6EE',
+  },
+  errorIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#B12704',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#3E1F00',
+    textAlign: 'center',
+    lineHeight: 24,
   },
 
   // Detail Screen
