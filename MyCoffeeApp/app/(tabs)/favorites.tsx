@@ -1,7 +1,10 @@
 import { View, Text, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useState, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useMemo, useState, useCallback, useEffect } from 'react';
+import { NavigationIndependentTree, useFocusEffect } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useFavorites } from './favorites-context';
+
+const Stack = createNativeStackNavigator();
 
 // ─── Static Menu Items ───────────────────────────────────────────────────────
 const staticMenuItems = [
@@ -17,83 +20,57 @@ const staticMenuItems = [
 ];
 
 // ─── Favorites Screen ────────────────────────────────────────────────────────
-export default function FavoritesScreen() {
-  const [favoriteItems, setFavoriteItems] = useState<any[]>([]);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+function FavoritesScreen() {
+  const { favoriteIds, toggleFavorite, refreshKey, refreshAll } = useFavorites();
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useFocusEffect(
     useCallback(() => {
-      loadFavorites();
       checkConnection();
     }, [])
   );
 
   async function checkConnection() {
+    setError('');
     try {
       const response = await fetch('https://api.sampleapis.com/coffee/hot', { method: 'HEAD' });
       if (!response.ok) throw new Error('No connection');
-      setError('');
     } catch (err: any) {
       console.warn('Connection check failed:', err);
       setError('☕ No internet connection. Please check your connection.');
     }
   }
 
-  async function loadFavorites() {
-    setLoading(true);
-    try {
-      const raw = await AsyncStorage.getItem('favorites');
-      const ids = raw ? JSON.parse(raw) : [];
-      setFavoriteIds(ids);
+  const favoriteItems = useMemo(() => {
+    const items = staticMenuItems.filter((item) => favoriteIds.includes(item.id));
 
-      // Filter menu items that are favorited
-      const items = staticMenuItems.filter((item) => ids.includes(item.id));
-      
-      // Group by category
-      const grouped = items.reduce((acc: any, item: any) => {
-        const existing = acc.find((g: any) => g.title === item.category);
-        if (existing) {
-          existing.data.push(item);
-        } else {
-          acc.push({ title: item.category, data: [item] });
-        }
-        return acc;
-      }, []);
+    return items.reduce((acc: any, item: any) => {
+      const existing = acc.find((g: any) => g.title === item.category);
+      if (existing) {
+        existing.data.push(item);
+      } else {
+        acc.push({ title: item.category, data: [item] });
+      }
+      return acc;
+    }, []);
+  }, [favoriteIds]);
 
-      setFavoriteItems(grouped);
-    } catch (err: any) {
-      console.warn('Failed to load favorites', err);
-      setError('Unable to load favorites. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+  async function retryConnection() {
+    setError('');
+    refreshAll();
   }
 
-  async function removeFavorite(id: string) {
-    const updated = favoriteIds.filter((itemId) => itemId !== id);
-    try {
-      await AsyncStorage.setItem('favorites', JSON.stringify(updated));
-      setFavoriteIds(updated);
-      
-      // Reload favorites to update the list
-      const items = staticMenuItems.filter((item) => updated.includes(item.id));
-      const grouped = items.reduce((acc: any, item: any) => {
-        const existing = acc.find((g: any) => g.title === item.category);
-        if (existing) {
-          existing.data.push(item);
-        } else {
-          acc.push({ title: item.category, data: [item] });
-        }
-        return acc;
-      }, []);
-      setFavoriteItems(grouped);
-    } catch (err: any) {
-      console.warn('Failed to remove favorite', err);
-      setError('Unable to remove favorite. Please try again.');
+  // react to global refresh trigger
+  useEffect(() => {
+    if (typeof refreshKey !== 'undefined') {
+      checkConnection();
     }
-  }
+  }, [refreshKey]);
+
+  const removeFavorite = (id: string) => {
+    toggleFavorite(id);
+  };
 
   const renderItem = ({ item }: any) => {
     return (
@@ -125,6 +102,9 @@ export default function FavoritesScreen() {
         <Text style={styles.errorIcon}>☕</Text>
         <Text style={styles.errorTitle}>Oops!</Text>
         <Text style={styles.errorMessage}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -155,6 +135,25 @@ export default function FavoritesScreen() {
   );
 }
 
+export default function App() {
+  return (
+    <NavigationIndependentTree>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: { backgroundColor: '#045028' },
+          headerTintColor: '#F5E6D3',
+          headerTitleStyle: { fontWeight: 'bold' },
+        }}
+      >
+        <Stack.Screen
+          name="FavoritesScreen"
+          component={FavoritesScreen}
+          options={{ title: '❤️ Favorites' }}
+        />
+      </Stack.Navigator>
+    </NavigationIndependentTree>
+  );
+}
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -230,7 +229,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5E6D3',
+    backgroundColor: '#FDF6EE',
   },
   loadingText: {
     marginTop: 10,
@@ -241,7 +240,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5E6D3',
+    backgroundColor: '#FDF6EE',
     paddingHorizontal: 20,
   },
   errorIcon: {
@@ -249,16 +248,30 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#045028',
-    marginBottom: 8,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#B12704',
+    marginBottom: 12,
+    textAlign: 'center',
   },
   errorMessage: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 16,
+    color: '#3E1F00',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
+  },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#045028',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#FDF6EE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   emptyContainer: {
     flex: 1,

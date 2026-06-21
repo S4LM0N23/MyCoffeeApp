@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { NavigationIndependentTree } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { useFavorites } from './favorites-context';
 
 const Stack = createStackNavigator();
 
@@ -17,7 +18,17 @@ function CartScreen({ navigation }: any) {
     loadNote();
   }, []);
 
+  const { refreshKey, refreshAll } = useFavorites();
+
+  useEffect(() => {
+    if (typeof refreshKey !== 'undefined') {
+      checkConnection();
+      loadNote();
+    }
+  }, [refreshKey]);
+
   async function checkConnection() {
+    setError('');
     try {
       const response = await fetch('https://api.sampleapis.com/coffee/hot', { method: 'HEAD' });
       if (!response.ok) throw new Error('No connection');
@@ -51,12 +62,20 @@ function CartScreen({ navigation }: any) {
     }
   }
 
+  async function retryConnection() {
+    setError('');
+    refreshAll();
+  }
+
   if (error) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorIcon}>☕</Text>
         <Text style={styles.errorTitle}>Oops!</Text>
         <Text style={styles.errorMessage}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -173,6 +192,19 @@ const styles = StyleSheet.create({
     color: '#3E1F00',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#045028',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#FDF6EE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   heading: {
     fontSize: 24,

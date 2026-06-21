@@ -1,8 +1,8 @@
 import { View, Text, SectionList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NavigationIndependentTree } from '@react-navigation/native';
+import { useState, useEffect, useCallback } from 'react';
+import { NavigationIndependentTree, useFocusEffect } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useFavorites } from './favorites-context';
 
 const remoteMenuUrl = 'https://api.sampleapis.com/coffee/hot';
 
@@ -30,12 +30,43 @@ function HomeScreen({ navigation }: any) {
   const [menuSections, setMenuSections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const { favoriteIds, toggleFavorite, refreshKey, refreshAll, isOnline } = useFavorites();
 
   useEffect(() => {
     loadMenu();
-    loadFavorites();
   }, []);
+
+  useEffect(() => {
+    // triggered when any tab calls `refreshAll()`
+    if (typeof refreshKey !== 'undefined') {
+      loadMenu();
+    }
+  }, [refreshKey]);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkConnection();
+    }, [])
+  );
+
+  async function checkConnection() {
+    setError('');
+    try {
+      const response = await fetch(remoteMenuUrl, { method: 'HEAD' });
+      if (!response.ok) {
+        throw new Error('No connection');
+      }
+    } catch (err: any) {
+      console.warn('Connection check failed:', err);
+      setError('☕ No internet connection. Please check your connection.');
+    }
+  }
+
+  useEffect(() => {
+    if (!isOnline) {
+      setError('☕ No internet connection. Please check your connection.');
+    }
+  }, [isOnline]);
 
   async function loadMenu() {
     setLoading(true);
@@ -78,29 +109,9 @@ function HomeScreen({ navigation }: any) {
     }
   }
 
-  async function loadFavorites() {
-    try {
-      const raw = await AsyncStorage.getItem('favorites');
-      if (raw) {
-        setFavoriteIds(JSON.parse(raw));
-      }
-    } catch (err) {
-      console.warn('Failed to load favorites', err);
-    }
-  }
-
-  async function saveFavorites(ids: string[]) {
-    try {
-      await AsyncStorage.setItem('favorites', JSON.stringify(ids));
-      setFavoriteIds(ids);
-    } catch (err) {
-      console.warn('Failed to save favorites', err);
-    }
-  }
-
-  function toggleFavorite(id: string) {
-    const updated = favoriteIds.includes(id) ? favoriteIds.filter((itemId) => itemId !== id) : [...favoriteIds, id];
-    saveFavorites(updated);
+  function retryConnection() {
+    setError('');
+    refreshAll();
   }
 
   const renderItem = ({ item }: any) => {
@@ -135,6 +146,9 @@ function HomeScreen({ navigation }: any) {
           <Text style={styles.errorIcon}>☕</Text>
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorMessage}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={retryConnection}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <>
@@ -316,6 +330,19 @@ const styles = StyleSheet.create({
     color: '#3E1F00',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#045028',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    color: '#FDF6EE',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 
   // Detail Screen
